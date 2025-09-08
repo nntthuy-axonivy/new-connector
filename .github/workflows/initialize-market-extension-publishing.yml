@@ -1,0 +1,75 @@
+name: Initialize Market Extension Publishing
+
+on: 
+  workflow_dispatch:
+    inputs:
+      productName:
+        description: |
+          Product Name (as displayed as name on the website), i.e. check Axon Ivy Portal at https://market.axonivy.com/portal#tab-description
+        required: true
+      productType:
+        description: 'Category – choose between Connector (REST/SOAP connection), Utils (little helper), or Demo (demo process, i.e. best practice)'
+        required: true
+        type: choice
+        options:
+          - connector
+          - utils
+          - demo
+      version:
+        description: 'Ivy version used for development (e.g. 12.0.0)'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  initiate-product:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "This runs only on the master branch"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: 21
+
+      - name: Rename folder MY-PRODUCT-NAME-product to ${{ github.event.repository.name }}-product
+        run: |
+          mv MY-PRODUCT-NAME-product ${{ github.event.repository.name }}-product
+
+      - name: Update name, groupId, artifactId, version, document
+        run: |
+          productName="${{ github.event.repository.name }}"
+          productType="${{ github.event.inputs.productType }}"
+          # 1. Remove productType at the end
+          groupId="com.axonivy.$productType.${productName/%-${productType}}"
+          # 2. Replace all '-' with '.'
+          groupId="${groupId//-/.}"
+          find . -type f -not -path "./.git/*" -not -path "./.github/*" -exec sed -i "s|# MY-PRODUCT-NAME|# ${{ github.event.inputs.productName }}|g" {} +
+          find . -type f -not -path "./.git/*" -not -path "./.github/*" -exec sed -i 's|"MY-RRODUCT-NAME"|"${{ github.event.inputs.productName }}"|g' {} +
+          find . -type f -not -path "./.git/*" -not -path "./.github/*" -exec sed -i "s|MY-PRODUCT-NAME|${{ github.event.repository.name }}|g" {} +
+          find . -type f -not -path "./.git/*" -not -path "./.github/*" -exec sed -i "s|<version>12.0.0-SNAPSHOT</version>|<version>${{ github.event.inputs.version }}-SNAPSHOT</version>|g" {} +
+          find . -type f -not -path "./.git/*" -not -path "./.github/*" -exec sed -i "s|MY-GROUP-ID|$groupId|g" {} +
+          find . -type f -not -path "./.git/*" -not -path "./.github/*" -exec sed -i "s|REPO-NAME|${{ github.event.repository.name }}|g" {} +
+          find . -type f -not -path "./.git/*" -not -path "./.github/*" -exec sed -i "s|<groupId>com.axonivy.market</groupId>|<groupId>$groupId</groupId>|g" {} +
+          find . -type f -not -path "./.git/*" -not -path "./.github/*" -exec sed -i 's|<!-- fill your product name -->||g' {} +
+          find . -type f -not -path "./.git/*" -not -path "./.github/*" -exec sed -i 's|<!-- fill your product name + a "-modules" postfix -->||g' {} +
+          find . -type f -not -path "./.git/*" -not -path "./.github/*" -exec sed -i 's|<!-- fill your product name + a "-product" postfix e.g. my-connector-product -->||g' {} +
+          find . -type f -not -path "./.git/*" -not -path "./.github/*" -exec sed -i 's|<!-- identicate your minimal compliant ivy version with the first 2 digits -->||g' {} +
+          find . -type f -not -path "./.git/*" -not -path "./.github/*" -exec sed -i 's|<!-- your group id: e.g. com.axonivy.connector.<myconnector> or com.axonivy.utils.<myutil> -->||g' {} +
+
+      - name: Create new branch
+        run: |
+          BRANCH="introduce-new-product"
+          git checkout -b "$BRANCH"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Initial new product - ${{ github.event.inputs.productName }}"
+          git push origin "$BRANCH"
